@@ -6,6 +6,9 @@ import OrderPage from "@/pages/Order";
 import AdminLogin from "@/pages/admin/Login";
 import AdminDashboard from "@/pages/admin/Dashboard";
 import MenuManager from "@/pages/admin/MenuManager";
+import Categories from "@/pages/admin/Categories";
+import MenuGallery from "@/pages/admin/MenuGallery";
+import Settings from "@/pages/admin/Settings";
 import { isAuthenticated } from "@/lib/auth";
 
 // Protected route component
@@ -38,6 +41,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <MenuManager />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/categories"
+            element={
+              <ProtectedRoute>
+                <Categories />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/menu-gallery"
+            element={
+              <ProtectedRoute>
+                <MenuGallery />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/settings"
+            element={
+              <ProtectedRoute>
+                <Settings />
               </ProtectedRoute>
             }
           />

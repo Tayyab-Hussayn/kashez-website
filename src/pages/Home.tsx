@@ -1,6 +1,7 @@
 import Navbar from "@/components/public/Navbar";
 import Hero from "@/components/public/Hero";
 import AboutSection from "@/components/public/AboutSection";
+import WhyChooseUs from "@/components/public/WhyChooseUs";
 import MenuPreview from "@/components/public/MenuPreview";
 import Testimonials from "@/components/public/Testimonials";
 import ReservationSection from "@/components/public/ReservationSection";
@@ -13,6 +14,7 @@ export default function Home() {
       <Navbar />
       <Hero />
       <AboutSection />
+      <WhyChooseUs />
       <MenuPreview />
       <Testimonials />
       <ReservationSection />

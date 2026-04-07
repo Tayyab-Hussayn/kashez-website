@@ -1,13 +1,23 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence, useMotionValue } from "framer-motion";
-import { X, UtensilsCrossed } from "lucide-react";
+import { X, UtensilsCrossed, Camera } from "lucide-react";
+import { getMenuGallery, type MenuGalleryImage } from "@/lib/db";
 
 export default function FloatingMenuButton() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [galleryImages, setGalleryImages] = useState<MenuGalleryImage[]>([]);
+  const [lightboxImage, setLightboxImage] = useState<MenuGalleryImage | null>(null);
   const dragX = useMotionValue(0);
   const dragY = useMotionValue(0);
   const dragStartRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (drawerOpen) {
+      const images = getMenuGallery();
+      setGalleryImages(images);
+    }
+  }, [drawerOpen]);
 
   const handleDragStart = () => {
     dragStartRef.current = { x: dragX.get(), y: dragY.get() };
@@ -84,22 +94,70 @@ export default function FloatingMenuButton() {
               </div>
 
               {/* Gallery Grid */}
-              <div className="grid grid-cols-2 gap-4">
-                {[1, 2, 3, 4, 5, 6].map((id) => (
-                  <div
-                    key={id}
-                    className="bg-surface-2 border border-stroke rounded-2xl aspect-square flex items-center justify-center"
-                  >
-                    <span className="text-muted font-body text-xs">Menu image {id}</span>
-                  </div>
-                ))}
-              </div>
-
-              <p className="mt-6 text-center font-body text-xs text-muted">
-                Add menu images to display here
-              </p>
+              {galleryImages.length === 0 ? (
+                <div className="text-center py-16">
+                  <Camera className="w-12 h-12 text-muted/40 mx-auto mb-4" />
+                  <p className="font-display italic text-xl text-muted">No menu images yet</p>
+                  <p className="font-body text-sm text-muted/60 mt-2">
+                    The restaurant will add menu photos soon.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  {galleryImages.map((image) => (
+                    <div
+                      key={image.id}
+                      onClick={() => setLightboxImage(image)}
+                      className="rounded-2xl overflow-hidden aspect-square relative group cursor-pointer"
+                    >
+                      <img
+                        src={image.url}
+                        alt={image.caption || "Menu item"}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                      {image.caption && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-bg/80 to-transparent p-3 font-body text-xs text-text-primary/80 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+                          {image.caption}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Lightbox */}
+      <AnimatePresence>
+        {lightboxImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setLightboxImage(null)}
+            className="fixed inset-0 z-[600] bg-bg/95 flex items-center justify-center p-4"
+          >
+            <button
+              onClick={() => setLightboxImage(null)}
+              className="absolute top-4 right-4 w-10 h-10 rounded-full border border-stroke flex items-center justify-center hover:border-accent/50 transition-colors"
+            >
+              <X className="w-5 h-5 text-muted" />
+            </button>
+            <div className="max-w-4xl w-full">
+              <img
+                src={lightboxImage.url}
+                alt={lightboxImage.caption || "Menu item"}
+                className="w-full h-auto rounded-2xl"
+              />
+              {lightboxImage.caption && (
+                <p className="text-center font-body text-sm text-text-primary/80 mt-4">
+                  {lightboxImage.caption}
+                </p>
+              )}
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </>

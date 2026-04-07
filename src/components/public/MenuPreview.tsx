@@ -1,13 +1,23 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { menuItems } from "@/lib/menuData";
+import { type MenuItem } from "@/lib/menuData";
+import { getFeaturedItems } from "@/lib/db";
 import { useCart } from "@/lib/CartContext";
+import { formatPKR } from "@/lib/currency";
 
 export default function MenuPreview() {
   const { addItem } = useCart();
-  const featuredItems = menuItems.slice(0, 6);
+  const [featuredItems, setFeaturedItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleAddToCart = (item: typeof menuItems[0]) => {
+  useEffect(() => {
+    const items = getFeaturedItems();
+    setFeaturedItems(items);
+    setLoading(false);
+  }, []);
+
+  const handleAddToCart = (item: MenuItem) => {
     addItem({
       id: item.id,
       name: item.name,
@@ -38,7 +48,23 @@ export default function MenuPreview() {
 
       {/* Grid */}
       <div className="max-w-[1200px] mx-auto px-6 md:px-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {featuredItems.map((item, index) => (
+        {loading ? (
+          // Loading skeletons
+          Array.from({ length: 3 }).map((_, index) => (
+            <div
+              key={index}
+              className="bg-surface-2 animate-pulse rounded-3xl overflow-hidden"
+            >
+              <div className="aspect-[4/3] bg-surface-2" />
+              <div className="p-5 space-y-3">
+                <div className="h-4 bg-surface-2 rounded w-2/3" />
+                <div className="h-3 bg-surface-2 rounded w-full" />
+                <div className="h-6 bg-surface-2 rounded w-1/3" />
+              </div>
+            </div>
+          ))
+        ) : (
+          featuredItems.map((item, index) => (
           <motion.div
             key={item.id}
             initial={{ opacity: 0, y: 30 }}
@@ -68,7 +94,7 @@ export default function MenuPreview() {
                 {item.description}
               </p>
               <div className="flex justify-between items-center">
-                <span className="font-display text-lg text-text-primary">${item.price}</span>
+                <span className="font-display text-lg text-text-primary">{formatPKR(item.price)}</span>
                 <button
                   onClick={() => handleAddToCart(item)}
                   className="rounded-full border border-stroke px-3 py-1 font-body text-xs text-muted hover:border-accent/50 hover:text-accent hover:bg-accent/5 transition-all duration-200"
@@ -78,7 +104,8 @@ export default function MenuPreview() {
               </div>
             </div>
           </motion.div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Mobile View Full Menu Link */}

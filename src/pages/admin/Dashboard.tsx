@@ -1,12 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, LayoutDashboard, Utensils, ExternalLink, Bell } from "lucide-react";
+import { Bell } from "lucide-react";
 import { getOrders, updateOrderStatus, type Order } from "@/lib/db";
-import { isAuthenticated, setAuthenticated } from "@/lib/auth";
+import { isAuthenticated } from "@/lib/auth";
+import AdminSidebar from "@/components/admin/AdminSidebar";
+import { formatPKR } from "@/lib/currency";
 
 export default function AdminDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
+  const [activeTab, setActiveTab] = useState<"active" | "history">("active");
   const [filter, setFilter] = useState<string>("All");
   const [loading, setLoading] = useState(true);
   const [newOrderAlert, setNewOrderAlert] = useState(false);
@@ -21,14 +25,15 @@ export default function AdminDashboard() {
   }, [navigate]);
 
   const fetchOrders = useCallback(() => {
-    const allOrders = getOrders();
-    if (allOrders.length > previousOrderCount && previousOrderCount > 0) {
+    const { active, history } = getOrders();
+    if (active.length > previousOrderCount && previousOrderCount > 0) {
       setNewOrderAlert(true);
       playNotificationSound();
       setTimeout(() => setNewOrderAlert(false), 5000);
     }
-    setPreviousOrderCount(allOrders.length);
-    setOrders(allOrders);
+    setPreviousOrderCount(active.length);
+    setOrders(active);
+    setHistoryOrders(history);
     setLoading(false);
   }, [previousOrderCount]);
 
@@ -59,11 +64,6 @@ export default function AdminDashboard() {
     const interval = setInterval(fetchOrders, 30000);
     return () => clearInterval(interval);
   }, [fetchOrders]);
-
-  const handleLogout = () => {
-    setAuthenticated(false);
-    navigate("/admin");
-  };
 
   const handleUpdateStatus = (orderId: string, status: Order["status"]) => {
     updateOrderStatus(orderId, status);
@@ -100,50 +100,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-bg flex">
-      {/* Sidebar */}
-      <aside className="w-60 bg-surface border-r border-stroke flex flex-col fixed h-full">
-        <div className="p-6 border-b border-stroke">
-          <h1 className="font-display italic text-xl text-text-primary">La Maison</h1>
-          <span className="bg-accent/15 text-accent text-[10px] rounded-full px-2 py-0.5 font-body mt-2 inline-block">
-            Admin
-          </span>
-        </div>
-
-        <nav className="flex-1 py-6 space-y-1 px-3">
-          <Link
-            to="/admin/dashboard"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-accent/10 text-accent font-body text-sm"
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            Orders
-          </Link>
-          <Link
-            to="/admin/menu-manager"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-muted hover:bg-surface-2 hover:text-text-primary font-body text-sm transition-colors"
-          >
-            <Utensils className="w-4 h-4" />
-            Menu Manager
-          </Link>
-          <Link
-            to="/"
-            target="_blank"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-muted hover:bg-surface-2 hover:text-text-primary font-body text-sm transition-colors"
-          >
-            <ExternalLink className="w-4 h-4" />
-            View Website
-          </Link>
-        </nav>
-
-        <div className="p-4 border-t border-stroke">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-muted hover:text-accent font-body text-sm transition-colors w-full"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
-        </div>
-      </aside>
+      <AdminSidebar active="orders" />
 
       {/* Main Content */}
       <main className="ml-60 flex-1 p-8">
@@ -171,12 +128,48 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Tab Selector */}
+        <div className="flex gap-2 mb-8">
+          <button
+            onClick={() => setActiveTab("active")}
+            className={`relative px-5 py-2 rounded-full font-body text-sm transition-all ${
+              activeTab === "active" ? "text-bg" : "bg-surface border border-stroke text-muted"
+            }`}
+          >
+            {activeTab === "active" && (
+              <motion.div
+                layoutId="orders-tab"
+                className="absolute inset-0 accent-gradient rounded-full"
+                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+              />
+            )}
+            <span className="relative z-10">📋 Active Orders</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`relative px-5 py-2 rounded-full font-body text-sm transition-all ${
+              activeTab === "history" ? "text-bg" : "bg-surface border border-stroke text-muted"
+            }`}
+          >
+            {activeTab === "history" && (
+              <motion.div
+                layoutId="orders-tab"
+                className="absolute inset-0 accent-gradient rounded-full"
+                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+              />
+            )}
+            <span className="relative z-10">🕐 Order History</span>
+          </button>
+        </div>
+
+        {activeTab === "active" ? (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard label="Today's Orders" value={todayOrders.length.toString()} />
           <StatCard label="New Orders" value={newOrders.toString()} />
           <StatCard label="In Progress" value={preparingOrders.toString()} />
-          <StatCard label="Today's Revenue" value={`$${todayRevenue.toFixed(0)}`} />
+          <StatCard label="Today's Revenue" value={formatPKR(todayRevenue)} />
         </div>
 
         {/* Filter Tabs */}
@@ -215,6 +208,45 @@ export default function AdminDashboard() {
               ))
           )}
         </div>
+          </>
+        ) : (
+          <>
+            {/* History Tab */}
+            <div className="mb-6">
+              <h2 className="font-display italic text-2xl text-text-primary mb-2">
+                Order History — Last 7 Days
+              </h2>
+              <div className="bg-surface border border-stroke rounded-xl px-4 py-3 mb-6">
+                <p className="font-body text-xs text-muted/70">
+                  Orders older than 7 days are automatically deleted.
+                </p>
+              </div>
+            </div>
+
+            {/* History Orders List */}
+            <div className="space-y-4">
+              {historyOrders.length === 0 ? (
+                <div className="text-center py-12 bg-surface border border-stroke rounded-2xl">
+                  <p className="font-display italic text-muted">No order history yet.</p>
+                </div>
+              ) : (
+                historyOrders
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .map((order) => (
+                    <div key={order.orderId} className="opacity-75">
+                      <OrderCard
+                        key={order.orderId}
+                        order={order}
+                        onUpdateStatus={() => {}}
+                        getTimeAgo={getTimeAgo}
+                        isHistory={true}
+                      />
+                    </div>
+                  ))
+              )}
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
@@ -233,10 +265,12 @@ function OrderCard({
   order,
   onUpdateStatus,
   getTimeAgo,
+  isHistory = false,
 }: {
   order: Order;
   onUpdateStatus: (id: string, status: Order["status"]) => void;
   getTimeAgo: (date: string) => string;
+  isHistory?: boolean;
 }) {
   const statusStyles: Record<string, string> = {
     new: "bg-accent/15 text-accent border-accent/30 animate-dot-pulse",
@@ -271,6 +305,16 @@ function OrderCard({
             {order.deliveryAddress && (
               <span className="font-body text-xs text-muted">• {order.deliveryAddress}</span>
             )}
+            {order.location && (
+              <a
+                href={`https://www.google.com/maps?q=${order.location.lat},${order.location.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-body text-xs text-accent hover:underline ml-1"
+              >
+                📍 View Location
+              </a>
+            )}
           </div>
         </div>
 
@@ -282,19 +326,21 @@ function OrderCard({
                 <span className="text-text-primary">
                   {item.quantity}x {item.name}
                 </span>
-                <span className="text-muted">${(item.price * item.quantity).toFixed(0)}</span>
+                <span className="text-muted">{formatPKR(item.price * item.quantity)}</span>
               </div>
             ))}
           </div>
           <div className="border-t border-stroke mt-2 pt-2 flex justify-between">
             <span className="font-body text-xs text-muted">Total</span>
-            <span className="font-display text-sm text-text-primary">${order.total.toFixed(2)}</span>
+            <span className="font-display text-sm text-text-primary">{formatPKR(order.total)}</span>
           </div>
         </div>
 
         {/* Right - Actions */}
         <div className="flex flex-col gap-2">
-          {order.status === "new" && (
+          {!isHistory && (
+            <>
+              {order.status === "new" && (
             <>
               <button
                 onClick={() => onUpdateStatus(order.orderId, "preparing")}
@@ -325,6 +371,13 @@ function OrderCard({
             >
               Mark Completed
             </button>
+          )}
+            </>
+          )}
+          {isHistory && (
+            <span className="rounded-full px-3 py-1 font-body text-[10px] uppercase tracking-wider border bg-stroke text-muted border-stroke">
+              Archived
+            </span>
           )}
         </div>
       </div>

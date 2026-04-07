@@ -4,19 +4,26 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, ShoppingCart } from "lucide-react";
 import Navbar from "@/components/public/Navbar";
 import Footer from "@/components/public/Footer";
-import { menuItems, categories, type MenuItem } from "@/lib/menuData";
+import { type MenuItem } from "@/lib/menuData";
 import { useCart } from "@/lib/CartContext";
-import { getMenu } from "@/lib/db";
+import { getMenu, getCategories } from "@/lib/db";
+import { formatPKR } from "@/lib/currency";
 
 export default function MenuPage() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [cartOpen, setCartOpen] = useState(false);
-  const [menuData, setMenuData] = useState<MenuItem[]>(menuItems);
+  const [menuData, setMenuData] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const { items, updateQuantity, removeItem, total, addItem } = useCart();
 
   useEffect(() => {
     const storedMenu = getMenu();
     setMenuData(storedMenu.filter((item) => item.available !== false));
+
+    const cats = getCategories();
+    setCategories(cats);
+    setLoadingCategories(false);
   }, []);
 
   return (
@@ -41,7 +48,16 @@ export default function MenuPage() {
       {/* Category Tabs */}
       <div className="sticky top-16 z-30 bg-bg/90 backdrop-blur-md border-b border-stroke">
         <div className="max-w-[1200px] mx-auto px-6 flex gap-2 py-3 overflow-x-auto scrollbar-hide">
-          {categories.map((category) => (
+          {loadingCategories ? (
+            // Loading skeleton pills
+            Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-9 w-24 bg-surface-2 animate-pulse rounded-full"
+              />
+            ))
+          ) : (
+            categories.map((category) => (
             <button
               key={category}
               onClick={() => setActiveCategory(category)}
@@ -60,7 +76,8 @@ export default function MenuPage() {
               )}
               <span className="relative z-10">{category}</span>
             </button>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
@@ -135,7 +152,7 @@ function MenuItemCard({ item, index, addItem }: { item: MenuItem; index: number;
           {item.description}
         </p>
         <div className="flex justify-between items-center">
-          <span className="font-display text-lg text-text-primary">${item.price}</span>
+          <span className="font-display text-lg text-text-primary">{formatPKR(item.price)}</span>
           <button
             onClick={handleAddToCart}
             className="rounded-full border border-stroke px-4 py-2 font-body text-sm text-muted hover:border-accent/50 hover:text-accent hover:bg-accent/5 transition-all duration-200"
@@ -209,7 +226,7 @@ function CartDrawer({ onClose, items, updateQuantity, removeItem, total }: any) 
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-display text-sm text-text-primary">
-                      ${(item.price * item.quantity).toFixed(0)}
+                      {formatPKR(item.price * item.quantity)}
                     </span>
                     <button
                       onClick={() => removeItem(item.id)}
@@ -225,7 +242,7 @@ function CartDrawer({ onClose, items, updateQuantity, removeItem, total }: any) 
             <div className="mt-6 pt-4 border-t border-stroke">
               <div className="flex justify-between items-center">
                 <span className="font-body text-sm text-muted">Subtotal</span>
-                <span className="font-display text-lg text-text-primary">${total.toFixed(2)}</span>
+                <span className="font-display text-lg text-text-primary">{formatPKR(total)}</span>
               </div>
             </div>
 

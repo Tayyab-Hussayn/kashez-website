@@ -3,12 +3,16 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShoppingCart, Menu, X } from "lucide-react";
 import { useCart } from "@/lib/CartContext";
+import { formatPKR } from "@/lib/currency";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
-  const { itemCount, items, removeItem, total } = useCart();
+  const { itemCount, items, removeItem, total, lastAdded } = useCart();
+  const [animateCart, setAnimateCart] = useState(false);
+  const [showRipple, setShowRipple] = useState(0);
+  const [showFlyup, setShowFlyup] = useState(0);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -17,6 +21,16 @@ export default function Navbar() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Cart animation trigger
+  useEffect(() => {
+    if (lastAdded > 0) {
+      setAnimateCart(true);
+      setShowRipple(lastAdded);
+      setShowFlyup(lastAdded);
+      setTimeout(() => setAnimateCart(false), 500);
+    }
+  }, [lastAdded]);
 
   const navLinks = [
     { name: "Home", href: "/" },
@@ -59,17 +73,67 @@ export default function Navbar() {
           {/* Right Section */}
           <div className="flex items-center gap-3">
             {/* Cart Button */}
-            <button
-              onClick={() => setCartOpen(true)}
-              className="relative w-9 h-9 rounded-full border border-stroke flex items-center justify-center hover:border-accent/50 transition-colors"
-            >
-              <ShoppingCart className="w-4 h-4 text-muted" />
-              {itemCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent text-bg text-[9px] font-body font-medium flex items-center justify-center">
-                  {itemCount}
-                </span>
-              )}
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setCartOpen(true)}
+                className="relative w-9 h-9 rounded-full border border-stroke flex items-center justify-center hover:border-accent/50 transition-colors"
+              >
+                <motion.div
+                  animate={
+                    animateCart
+                      ? {
+                          scale: [1, 1.35, 0.9, 1.15, 1],
+                          rotate: [0, -12, 10, -6, 0],
+                        }
+                      : {}
+                  }
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                >
+                  <ShoppingCart className="w-4 h-4 text-muted" />
+                </motion.div>
+                {itemCount > 0 && (
+                  <motion.span
+                    key={`badge-${lastAdded}`}
+                    initial={{ scale: 0 }}
+                    animate={{ scale: [0, 1.4, 1] }}
+                    transition={{ duration: 0.35, ease: [0.68, -0.55, 0.265, 1.55] }}
+                    className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent text-bg text-[9px] font-body font-medium flex items-center justify-center"
+                  >
+                    {itemCount}
+                  </motion.span>
+                )}
+              </button>
+
+              {/* Ripple ring */}
+              <AnimatePresence>
+                {showRipple > 0 && (
+                  <motion.div
+                    key={`ripple-${showRipple}`}
+                    initial={{ scale: 1, opacity: 0.8 }}
+                    animate={{ scale: 2, opacity: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    className="absolute inset-0 w-9 h-9 rounded-full border-2 border-accent pointer-events-none"
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* Flyup ghost */}
+              <AnimatePresence>
+                {showFlyup > 0 && (
+                  <motion.div
+                    key={`flyup-${showFlyup}`}
+                    initial={{ y: 0, opacity: 1 }}
+                    animate={{ y: -24, opacity: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className="absolute -top-6 left-1/2 -translate-x-1/2 font-body text-xs text-accent font-medium pointer-events-none"
+                  >
+                    +1
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Order Online Button */}
             <Link
@@ -182,7 +246,7 @@ function CartDrawer({ onClose, items, removeItem, total }: any) {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-display text-sm text-text-primary">
-                      ${(item.price * item.quantity).toFixed(0)}
+                      {formatPKR(item.price * item.quantity)}
                     </span>
                     <button
                       onClick={() => removeItem(item.id)}
@@ -198,7 +262,7 @@ function CartDrawer({ onClose, items, removeItem, total }: any) {
             <div className="mt-6 pt-4 border-t border-stroke">
               <div className="flex justify-between items-center">
                 <span className="font-body text-sm text-muted">Subtotal</span>
-                <span className="font-display text-lg text-text-primary">${total.toFixed(2)}</span>
+                <span className="font-display text-lg text-text-primary">{formatPKR(total)}</span>
               </div>
             </div>
 

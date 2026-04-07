@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Check, ShoppingCart, Minus, Plus, MapPin, Store } from "lucide-react";
 import Navbar from "@/components/public/Navbar";
 import Footer from "@/components/public/Footer";
-import { menuItems, categories, type MenuItem } from "@/lib/menuData";
+import { type MenuItem } from "@/lib/menuData";
 import { useCart } from "@/lib/CartContext";
-import { getMenu, saveOrder, type Order } from "@/lib/db";
-
+import { getMenu, saveOrder, getCategories, getSettings, isRestaurantOpen, type Order } from "@/lib/db";
+import { formatPKR } from "@/lib/currency";
 export default function OrderPage() {
   const [orderType, setOrderType] = useState<"delivery" | "pickup">("delivery");
   const [address, setAddress] = useState("");
@@ -133,20 +133,65 @@ export default function OrderPage() {
 
 function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "pickup"; deliveryAddress: string }) {
   const [activeCategory, setActiveCategory] = useState("All");
-  const [menuData, setMenuData] = useState<MenuItem[]>(menuItems);
+  const [menuData, setMenuData] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [orderId, setOrderId] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
+  const [manualAddress, setManualAddress] = useState("");
+  const [attachedLocation, setAttachedLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [settings, setSettings] = useState(getSettings());
+  const [restaurantOpen, setRestaurantOpen] = useState(true);
 
   const { items, updateQuantity, removeItem, total, clearCart, itemCount, addItem } = useCart();
 
   useEffect(() => {
     const storedMenu = getMenu();
     setMenuData(storedMenu.filter((item) => item.available !== false));
+
+    const cats = getCategories();
+    setCategories(cats);
+    setLoadingCategories(false);
+
+    const currentSettings = getSettings();
+    setSettings(currentSettings);
+    setRestaurantOpen(isRestaurantOpen(currentSettings));
   }, []);
+
+  const handleAttachLocation = () => {
+    setLocationLoading(true);
+    setLocationError("");
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude: lat, longitude: lng } = position.coords;
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            { headers: { "Accept-Language": "en" } }
+          );
+          const data = await res.json();
+          const address = data.display_name || `${lat}, ${lng}`;
+          setAttachedLocation({ lat, lng, address });
+          setManualAddress(address);
+          setLocationLoading(false);
+        } catch (error) {
+          setLocationError("Could not detect location. Please enter manually.");
+          setLocationLoading(false);
+        }
+      },
+      () => {
+        setLocationError("Could not detect location. Please enter manually.");
+        setLocationLoading(false);
+      },
+      { timeout: 10000 }
+    );
+  };
 
   const handlePlaceOrder = () => {
     if (!customerName || !customerPhone) return;
@@ -159,9 +204,9 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
       orderId: newOrderId,
       customerName,
       phone: customerPhone,
-      email: customerEmail,
       orderType,
-      deliveryAddress: orderType === "delivery" ? deliveryAddress : undefined,
+      deliveryAddress: orderType === "delivery" ? manualAddress : undefined,
+      location: attachedLocation || undefined,
       items: items.map((item) => ({
         id: item.id,
         name: item.name,
@@ -170,9 +215,10 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
         options: item.options,
       })),
       subtotal: total,
-      total: total * 1.08 + (orderType === "delivery" ? 3.99 : 0),
+      total: total + (orderType === "delivery" ? settings.deliveryFee : 0),
       status: "new",
       createdAt: new Date().toISOString(),
+      archivedAt: null,
     };
 
     saveOrder(orderData);
@@ -182,9 +228,8 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
     setIsSubmitting(false);
   };
 
-  const deliveryFee = orderType === "delivery" ? 3.99 : 0;
-  const tax = total * 0.08;
-  const finalTotal = total + deliveryFee + tax;
+  const deliveryFee = orderType === "delivery" ? settings.deliveryFee : 0;
+  const finalTotal = total + deliveryFee;
 
   return (
     <section className="max-w-[1300px] mx-auto px-4 md:px-8 py-12 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
@@ -192,7 +237,16 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
       <div>
         {/* Category Tabs */}
         <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-8">
-          {categories.map((category) => (
+          {loadingCategories ? (
+            // Loading skeleton pills
+            Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-9 w-24 bg-surface-2 animate-pulse rounded-full"
+              />
+            ))
+          ) : (
+            categories.map((category) => (
             <button
               key={category}
               onClick={() => setActiveCategory(category)}
@@ -211,7 +265,8 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
               )}
               <span className="relative z-10">{category}</span>
             </button>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Menu Items */}
@@ -240,6 +295,19 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
 
       {/* Right Column - Sticky Order Cart */}
       <div className="lg:sticky lg:top-24 bg-surface border border-stroke rounded-3xl p-6">
+        {/* Closed Banner */}
+        {!restaurantOpen && (
+          <div className="bg-accent/10 border border-accent/30 rounded-xl px-4 py-3 mb-4 flex items-center gap-3">
+            <span className="text-accent text-lg">🕐</span>
+            <div>
+              <p className="font-body font-medium text-sm text-text-primary">Currently Closed</p>
+              <p className="font-body text-xs text-muted">
+                We're open {settings.openingTime} – {settings.closingTime}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center gap-2 mb-4">
           <h2 className="font-display text-2xl text-text-primary">Your Order</h2>
@@ -274,7 +342,7 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-display text-sm text-text-primary">
-                      ${(item.price * item.quantity).toFixed(0)}
+                      {formatPKR(item.price * item.quantity)}
                     </span>
                     <button
                       onClick={() => removeItem(item.id)}
@@ -291,21 +359,24 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
             <div className="mt-4 pt-4 border-t border-stroke space-y-2">
               <div className="flex justify-between">
                 <span className="font-body text-sm text-muted">Subtotal</span>
-                <span className="font-body text-sm text-text-primary">${total.toFixed(2)}</span>
+                <span className="font-body text-sm text-text-primary">{formatPKR(total)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="font-body text-sm text-muted">Delivery</span>
-                <span className="font-body text-sm text-text-primary">
-                  {orderType === "delivery" ? "$3.99" : "Free"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-body text-sm text-muted">Tax (8%)</span>
-                <span className="font-body text-sm text-text-primary">${tax.toFixed(2)}</span>
+                <div className="text-right">
+                  <span className="font-body text-sm text-text-primary">
+                    {orderType === "delivery" ? formatPKR(settings.deliveryFee) : "Free"}
+                  </span>
+                  {orderType === "delivery" && settings.deliveryFeeNote && (
+                    <p className="font-body text-[11px] text-muted/60 mt-0.5">
+                      {settings.deliveryFeeNote}
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="flex justify-between pt-3 border-t border-stroke mt-3">
                 <span className="font-display text-lg text-text-primary">Total</span>
-                <span className="font-display text-lg text-text-primary">${finalTotal.toFixed(2)}</span>
+                <span className="font-display text-lg text-text-primary">{formatPKR(finalTotal)}</span>
               </div>
             </div>
 
@@ -314,7 +385,7 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
               {orderType === "delivery" ? (
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4" />
-                  Delivery to: {deliveryAddress || "Your address"}
+                  Delivery to: {manualAddress || deliveryAddress || "Your address"}
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -340,13 +411,74 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
                 placeholder="Phone number"
                 className="w-full bg-surface-2 border border-stroke rounded-xl px-4 py-3 font-body text-sm text-text-primary placeholder:text-muted/50 focus:outline-none focus:border-accent/50 transition-colors"
               />
-              <input
-                type="email"
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-                placeholder="Email (optional)"
-                className="w-full bg-surface-2 border border-stroke rounded-xl px-4 py-3 font-body text-sm text-text-primary placeholder:text-muted/50 focus:outline-none focus:border-accent/50 transition-colors"
-              />
+
+              {/* Delivery Address - only for delivery */}
+              {orderType === "delivery" && (
+                <>
+                  <div>
+                    <label className="block font-body text-xs text-muted uppercase tracking-wider mb-2">
+                      Delivery Address
+                    </label>
+                    <input
+                      type="text"
+                      value={manualAddress}
+                      onChange={(e) => setManualAddress(e.target.value)}
+                      placeholder="Street, area, landmark..."
+                      className="w-full bg-surface-2 border border-stroke rounded-xl px-4 py-3 font-body text-sm text-text-primary placeholder:text-muted/50 focus:outline-none focus:border-accent/50 transition-colors"
+                    />
+                  </div>
+
+                  {/* Attach Live Location Button */}
+                  {!attachedLocation ? (
+                    <button
+                      type="button"
+                      onClick={handleAttachLocation}
+                      disabled={locationLoading}
+                      className="w-full flex items-center justify-center gap-2 border border-stroke rounded-xl py-3 font-body text-sm text-muted hover:border-accent/40 hover:text-text-primary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                    >
+                      {locationLoading ? (
+                        <>
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                            className="w-4 h-4 border-2 border-muted border-t-transparent rounded-full"
+                          />
+                          Detecting location...
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="w-4 h-4" />
+                          Attach Live Location
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="mt-2">
+                      <div className="w-full flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/30 rounded-xl py-3 font-body text-sm text-green-400">
+                        <Check className="w-4 h-4" />
+                        Location Attached ✓
+                      </div>
+                      <p className="font-body text-[11px] text-muted/70 mt-2 px-1">
+                        {attachedLocation.address.length > 80
+                          ? attachedLocation.address.substring(0, 80) + "..."
+                          : attachedLocation.address}
+                        {" "}
+                        <button
+                          onClick={() => setAttachedLocation(null)}
+                          className="text-accent hover:underline ml-1"
+                        >
+                          Change
+                        </button>
+                      </p>
+                    </div>
+                  )}
+
+                  {locationError && (
+                    <p className="font-body text-xs text-accent/70 mt-1">{locationError}</p>
+                  )}
+                </>
+              )}
+
               <p className="font-body text-[10px] text-muted/60 text-center">
                 No account needed — we'll confirm by SMS.
               </p>
@@ -355,7 +487,7 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
             {/* Place Order Button */}
             <button
               onClick={handlePlaceOrder}
-              disabled={items.length === 0 || !customerName || !customerPhone || isSubmitting}
+              disabled={items.length === 0 || !customerName || !customerPhone || isSubmitting || !restaurantOpen}
               className="w-full accent-gradient rounded-xl py-4 mt-5 font-body font-medium text-sm text-bg disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
             >
               {isSubmitting ? (
@@ -367,8 +499,10 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
                   />
                   Processing...
                 </span>
+              ) : !restaurantOpen ? (
+                "Restaurant Currently Closed"
               ) : (
-                `Place Order — $${finalTotal.toFixed(2)}`
+                `Place Order — ${formatPKR(finalTotal)}`
               )}
             </button>
           </>
@@ -455,7 +589,7 @@ function OrderItemCard({ item, addItem, items, updateQuantity }: { item: MenuIte
 
           {/* Bottom Row */}
           <div className="flex justify-between items-center mt-1">
-            <span className="font-display text-lg text-text-primary">${item.price}</span>
+            <span className="font-display text-lg text-text-primary">{formatPKR(item.price)}</span>
 
             {cartItem ? (
               <div className="flex items-center gap-2">

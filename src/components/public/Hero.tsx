@@ -1,10 +1,18 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import gsap from "gsap";
 
+const heroImages = [
+  "https://images.unsplash.com/photo-1514190051997-0f6f39ca5cde?w=1600", // moody restaurant interior
+  "https://images.unsplash.com/photo-1600891964599-f61ba0e24092?w=1600", // plated dish close-up
+  "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1600", // candlelit restaurant
+  "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1600", // beautiful food spread
+];
+
 export default function Hero() {
   const headlineRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
     if (headlineRef.current) {
@@ -23,15 +31,34 @@ export default function Hero() {
     }
   }, []);
 
+  // Auto-advance carousel
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveIndex((prev) => (prev + 1) % heroImages.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <section className="min-h-screen relative flex flex-col items-center justify-center text-center px-6 overflow-hidden">
-      {/* Background Image */}
+      {/* Background Image Carousel */}
       <div className="absolute inset-0 z-0">
-        <img
-          src="https://images.unsplash.com/photo-1514190051997-0f6f39ca5cde?w=1600"
-          alt="Restaurant interior"
-          className="w-full h-full object-cover object-center"
-        />
+        {heroImages.map((image, index) => (
+          <motion.div
+            key={index}
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: index === activeIndex ? 1 : 0 }}
+            transition={{ duration: 1.5, ease: "easeInOut" }}
+          >
+            <img
+              src={image}
+              alt=""
+              className="w-full h-full object-cover object-center"
+              loading={index === 0 ? "eager" : "lazy"}
+            />
+          </motion.div>
+        ))}
         {/* Dark overlay gradient */}
         <div className="absolute inset-0 bg-gradient-to-b from-bg/80 via-bg/60 to-bg" />
       </div>
@@ -99,8 +126,23 @@ export default function Hero() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1.2, duration: 0.8 }}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
+        className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-10"
       >
+        {/* Dot indicators */}
+        <div className="flex gap-2 items-center justify-center mb-4">
+          {heroImages.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setActiveIndex(index)}
+              className={`rounded-full transition-all duration-300 ${
+                index === activeIndex
+                  ? "bg-accent w-4 h-1.5"
+                  : "bg-text-primary/30 w-1.5 h-1.5"
+              }`}
+              aria-label={`Go to slide ${index + 1}`}
+            />
+          ))}
+        </div>
         <div className="w-px h-12 bg-gradient-to-b from-transparent via-muted to-transparent" />
       </motion.div>
     </section>

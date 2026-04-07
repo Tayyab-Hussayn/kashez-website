@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, LayoutDashboard, Utensils, ExternalLink, Plus, X, Edit2, Trash2 } from "lucide-react";
+import { Plus, X, Edit2, Trash2, Star } from "lucide-react";
 import { categories, type MenuItem } from "@/lib/menuData";
-import { getMenu, updateMenuItem, deleteMenuItem } from "@/lib/db";
-import { isAuthenticated, setAuthenticated } from "@/lib/auth";
+import { getMenu, updateMenuItem, deleteMenuItem, toggleFeatured } from "@/lib/db";
+import { isAuthenticated } from "@/lib/auth";
+import AdminSidebar from "@/components/admin/AdminSidebar";
+import { formatPKR } from "@/lib/currency";
 
 export default function MenuManager() {
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -27,11 +29,6 @@ export default function MenuManager() {
     setLoading(false);
   };
 
-  const handleLogout = () => {
-    setAuthenticated(false);
-    navigate("/admin");
-  };
-
   const handleSaveItem = (item: MenuItem) => {
     updateMenuItem(item);
     fetchMenu();
@@ -50,6 +47,11 @@ export default function MenuManager() {
     handleSaveItem(updated);
   };
 
+  const handleToggleFeatured = (item: MenuItem) => {
+    toggleFeatured(item.id);
+    fetchMenu();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
@@ -60,50 +62,7 @@ export default function MenuManager() {
 
   return (
     <div className="min-h-screen bg-bg flex">
-      {/* Sidebar */}
-      <aside className="w-60 bg-surface border-r border-stroke flex flex-col fixed h-full">
-        <div className="p-6 border-b border-stroke">
-          <h1 className="font-display italic text-xl text-text-primary">La Maison</h1>
-          <span className="bg-accent/15 text-accent text-[10px] rounded-full px-2 py-0.5 font-body mt-2 inline-block">
-            Admin
-          </span>
-        </div>
-
-        <nav className="flex-1 py-6 space-y-1 px-3">
-          <Link
-            to="/admin/dashboard"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-muted hover:bg-surface-2 hover:text-text-primary font-body text-sm transition-colors"
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            Orders
-          </Link>
-          <Link
-            to="/admin/menu-manager"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-accent/10 text-accent font-body text-sm"
-          >
-            <Utensils className="w-4 h-4" />
-            Menu Manager
-          </Link>
-          <Link
-            to="/"
-            target="_blank"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-muted hover:bg-surface-2 hover:text-text-primary font-body text-sm transition-colors"
-          >
-            <ExternalLink className="w-4 h-4" />
-            View Website
-          </Link>
-        </nav>
-
-        <div className="p-4 border-t border-stroke">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-muted hover:text-accent font-body text-sm transition-colors w-full"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
-        </div>
-      </aside>
+      <AdminSidebar active="menu-manager" />
 
       {/* Main Content */}
       <main className="ml-60 flex-1 p-8">
@@ -146,11 +105,11 @@ export default function MenuManager() {
                 <span className="rounded-full bg-surface-2 border border-stroke px-2 py-0.5 font-body text-[10px] text-muted">
                   {item.category}
                 </span>
-                <span className="font-display text-sm text-text-primary">${item.price}</span>
+                <span className="font-display text-sm text-text-primary">{formatPKR(item.price)}</span>
               </div>
 
               {/* Available Toggle */}
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-3">
                 <span className="font-body text-sm text-muted">Available</span>
                 <button
                   onClick={() => handleToggleAvailable(item)}
@@ -163,6 +122,24 @@ export default function MenuManager() {
                     className="absolute top-1 w-4 h-4 rounded-full bg-bg"
                   />
                 </button>
+              </div>
+
+              {/* Featured Toggle */}
+              <div className="mb-4">
+                <button
+                  onClick={() => handleToggleFeatured(item)}
+                  className={`w-full rounded-full px-3 py-1 font-body text-xs transition-colors ${
+                    item.featured
+                      ? "bg-accent/15 border border-accent/30 text-accent"
+                      : "border border-stroke text-muted hover:border-accent/30"
+                  }`}
+                >
+                  <Star className={`w-3 h-3 inline mr-1 ${item.featured ? "fill-accent" : ""}`} />
+                  Feature on Homepage
+                </button>
+                <p className="font-body text-[10px] text-muted/50 mt-1 text-center">
+                  Featured items appear in the Homepage Signature Dishes section.
+                </p>
               </div>
 
               {/* Actions */}
