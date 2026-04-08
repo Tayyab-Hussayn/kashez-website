@@ -5,7 +5,7 @@ import Navbar from "@/components/public/Navbar";
 import Footer from "@/components/public/Footer";
 import { type MenuItem } from "@/lib/menuData";
 import { useCart } from "@/lib/CartContext";
-import { getMenu, saveOrder, getCategories, getSettings, isRestaurantOpen, type Order } from "@/lib/db";
+import { getMenu, saveOrder, getCategories, getSettings, isRestaurantOpen, DEFAULT_SETTINGS, type Order } from "@/lib/db";
 import { formatPKR } from "@/lib/currency";
 export default function OrderPage() {
   const [orderType, setOrderType] = useState<"delivery" | "pickup">("delivery");
@@ -145,22 +145,24 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [settings, setSettings] = useState(getSettings());
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [restaurantOpen, setRestaurantOpen] = useState(true);
 
   const { items, updateQuantity, removeItem, total, clearCart, itemCount, addItem } = useCart();
 
   useEffect(() => {
-    const storedMenu = getMenu();
-    setMenuData(storedMenu.filter((item) => item.available !== false));
-
-    const cats = getCategories();
-    setCategories(cats);
-    setLoadingCategories(false);
-
-    const currentSettings = getSettings();
-    setSettings(currentSettings);
-    setRestaurantOpen(isRestaurantOpen(currentSettings));
+    (async () => {
+      const [storedMenu, cats, currentSettings] = await Promise.all([
+        getMenu(),
+        getCategories(),
+        getSettings(),
+      ]);
+      setMenuData(storedMenu.filter((item) => item.available !== false));
+      setCategories(cats);
+      setLoadingCategories(false);
+      setSettings(currentSettings);
+      setRestaurantOpen(isRestaurantOpen(currentSettings));
+    })();
   }, []);
 
   const handleAttachLocation = () => {
@@ -193,7 +195,7 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
     );
   };
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     if (!customerName || !customerPhone) return;
 
     setIsSubmitting(true);
@@ -221,7 +223,7 @@ function OrderLayout({ orderType, deliveryAddress }: { orderType: "delivery" | "
       archivedAt: null,
     };
 
-    saveOrder(orderData);
+    await saveOrder(orderData);
     setOrderId(newOrderId);
     setShowConfirmation(true);
     clearCart();

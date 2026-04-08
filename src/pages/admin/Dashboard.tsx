@@ -24,8 +24,8 @@ export default function AdminDashboard() {
     }
   }, [navigate]);
 
-  const fetchOrders = useCallback(() => {
-    const { active, history } = getOrders();
+  const fetchOrders = useCallback(async () => {
+    const { active, history } = await getOrders();
     if (active.length > previousOrderCount && previousOrderCount > 0) {
       setNewOrderAlert(true);
       playNotificationSound();
@@ -65,8 +65,8 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
-  const handleUpdateStatus = (orderId: string, status: Order["status"]) => {
-    updateOrderStatus(orderId, status);
+  const handleUpdateStatus = async (orderId: string, status: Order["status"]) => {
+    await updateOrderStatus(orderId, status);
     fetchOrders();
   };
 

@@ -24,32 +24,32 @@ export default function Categories() {
     fetchCategories();
   }, [navigate]);
 
-  const fetchCategories = () => {
-    const cats = getCategories();
+  const fetchCategories = async () => {
+    const cats = await getCategories();
     setCategories(cats);
     setLoading(false);
   };
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     if (!newCategoryName.trim()) return;
-    addCategory(newCategoryName.trim());
+    await addCategory(newCategoryName.trim());
     setNewCategoryName("");
     setShowAddForm(false);
     fetchCategories();
   };
 
-  const handleRenameCategory = (oldName: string) => {
+  const handleRenameCategory = async (oldName: string) => {
     if (!editValue.trim() || editValue === oldName) {
       setEditingCategory(null);
       return;
     }
-    renameCategory(oldName, editValue.trim());
+    await renameCategory(oldName, editValue.trim());
     setEditingCategory(null);
     fetchCategories();
   };
 
-  const handleDeleteCategory = (name: string) => {
-    deleteCategory(name);
+  const handleDeleteCategory = async (name: string) => {
+    await deleteCategory(name);
     setDeleteConfirm(null);
     fetchCategories();
   };

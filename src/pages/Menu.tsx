@@ -18,12 +18,12 @@ export default function MenuPage() {
   const { items, updateQuantity, removeItem, total, addItem } = useCart();
 
   useEffect(() => {
-    const storedMenu = getMenu();
-    setMenuData(storedMenu.filter((item) => item.available !== false));
-
-    const cats = getCategories();
-    setCategories(cats);
-    setLoadingCategories(false);
+    (async () => {
+      const [storedMenu, cats] = await Promise.all([getMenu(), getCategories()]);
+      setMenuData(storedMenu.filter((item) => item.available !== false));
+      setCategories(cats);
+      setLoadingCategories(false);
+    })();
   }, []);
 
   return (

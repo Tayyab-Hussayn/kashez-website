@@ -12,9 +12,11 @@ export default function MenuPreview() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const items = getFeaturedItems();
-    setFeaturedItems(items);
-    setLoading(false);
+    (async () => {
+      const items = await getFeaturedItems();
+      setFeaturedItems(items);
+      setLoading(false);
+    })();
   }, []);
 
   const handleAddToCart = (item: MenuItem) => {

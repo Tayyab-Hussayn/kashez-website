@@ -1,3 +1,4 @@
+import { supabase } from "./supabase";
 import { type MenuItem, defaultCategories, menuItems } from "./menuData";
 
 export interface Order {
@@ -33,13 +34,7 @@ export interface Settings {
   deliveryFeeNote: string;
 }
 
-const ORDERS_KEY = "lamaison_orders";
-const MENU_KEY = "lamaison_menu";
-const CATEGORIES_KEY = "lamaison_categories";
-const GALLERY_KEY = "lamaison_menu_gallery";
-const SETTINGS_KEY = "lamaison_settings";
-
-const DEFAULT_SETTINGS: Settings = {
+export const DEFAULT_SETTINGS: Settings = {
   restaurantName: "La Maison",
   openingTime: "17:00",
   closingTime: "23:00",
@@ -48,241 +43,302 @@ const DEFAULT_SETTINGS: Settings = {
   deliveryFeeNote: "Free delivery on orders above Rs. 3,000",
 };
 
-// ── Orders ──────────────────────────────────────────
+// ── Row mappers ──────────────────────────────────────
 
-function cleanupOrders(orders: Order[]): Order[] {
-  const now = new Date().getTime();
-  const TWELVE_HOURS = 12 * 60 * 60 * 1000;
-  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-
-  return orders
-    .map((order) => {
-      // Auto-archive: if not completed and older than 12 hours
-      if (
-        order.status !== "completed" &&
-        order.status !== "rejected" &&
-        now - new Date(order.createdAt).getTime() > TWELVE_HOURS
-      ) {
-        return { ...order, status: "completed" as const, archivedAt: new Date().toISOString() };
-      }
-      return order;
-    })
-    .filter((order) => {
-      // Delete if archived more than 7 days ago
-      if (order.archivedAt && now - new Date(order.archivedAt).getTime() > SEVEN_DAYS) {
-        return false;
-      }
-      return true;
-    });
+function mapMenuRow(row: any): MenuItem {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || "",
+    price: row.price,
+    category: row.category,
+    image: row.image || "",
+    badge: row.badge || "",
+    hasOptions: row.has_options || false,
+    available: row.available !== false,
+    featured: row.featured || false,
+    options: row.options,
+  };
 }
 
-function getRawOrders(): Order[] {
-  try {
-    const data = localStorage.getItem(ORDERS_KEY);
-    if (!data) return [];
-    const orders: Order[] = JSON.parse(data);
-    // Migrate old orders missing archivedAt
-    return orders.map((o) => ({
-      ...o,
-      archivedAt: o.archivedAt !== undefined ? o.archivedAt : null,
-    }));
-  } catch {
-    return [];
-  }
+function mapMenuItemToRow(item: MenuItem) {
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description || "",
+    price: item.price,
+    category: item.category,
+    image: item.image || "",
+    badge: item.badge || "",
+    has_options: item.hasOptions || false,
+    available: item.available !== false,
+    featured: item.featured || false,
+    options: item.options ?? null,
+  };
 }
 
-export function getOrders(): { active: Order[]; history: Order[] } {
-  const raw = getRawOrders();
-  const cleaned = cleanupOrders(raw);
-  localStorage.setItem(ORDERS_KEY, JSON.stringify(cleaned));
-
-  const active = cleaned.filter((o) => o.archivedAt === null);
-  const history = cleaned.filter((o) => o.archivedAt !== null);
-  return { active, history };
+function mapGalleryRow(row: any): MenuGalleryImage {
+  return {
+    id: row.id,
+    url: row.url,
+    caption: row.caption || "",
+    createdAt: row.created_at,
+  };
 }
 
-// Legacy compat: return all active orders as flat array
-export function getActiveOrders(): Order[] {
-  return getOrders().active;
+function mapSettingsRow(row: any): Settings {
+  return {
+    restaurantName: row.restaurant_name ?? DEFAULT_SETTINGS.restaurantName,
+    openingTime: row.opening_time ?? DEFAULT_SETTINGS.openingTime,
+    closingTime: row.closing_time ?? DEFAULT_SETTINGS.closingTime,
+    isOpen: row.is_open ?? DEFAULT_SETTINGS.isOpen,
+    deliveryFee: row.delivery_fee ?? DEFAULT_SETTINGS.deliveryFee,
+    deliveryFeeNote: row.delivery_fee_note ?? DEFAULT_SETTINGS.deliveryFeeNote,
+  };
 }
 
-export function saveOrder(order: Order): void {
-  const raw = getRawOrders();
-  const cleaned = cleanupOrders(raw);
-  cleaned.push({ ...order, archivedAt: null });
-  localStorage.setItem(ORDERS_KEY, JSON.stringify(cleaned));
-}
-
-export function updateOrderStatus(orderId: string, status: Order["status"]): void {
-  const raw = getRawOrders();
-  const index = raw.findIndex((o) => o.orderId === orderId);
-  if (index !== -1) {
-    raw[index].status = status;
-    if (status === "completed") {
-      raw[index].archivedAt = new Date().toISOString();
-    }
-    localStorage.setItem(ORDERS_KEY, JSON.stringify(raw));
-  }
+function mapOrderRow(row: any): Order {
+  return {
+    orderId: row.order_id,
+    customerName: row.customer_name,
+    phone: row.phone,
+    orderType: row.order_type,
+    deliveryAddress: row.delivery_address,
+    location: row.location,
+    items: row.items,
+    subtotal: row.subtotal,
+    total: row.total,
+    specialInstructions: row.special_instructions,
+    status: row.status,
+    createdAt: row.created_at,
+    archivedAt: row.archived_at ?? null,
+  };
 }
 
 // ── Menu ────────────────────────────────────────────
 
-export function getMenu(): MenuItem[] {
-  try {
-    const data = localStorage.getItem(MENU_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
+export async function getMenu(): Promise<MenuItem[]> {
+  const { data, error } = await supabase.from("menu_items").select("*").order("id");
+  if (error) { console.error("getMenu:", error); return []; }
+  return (data || []).map(mapMenuRow);
+}
+
+export async function updateMenuItem(item: MenuItem): Promise<void> {
+  const { error } = await supabase.from("menu_items").upsert(mapMenuItemToRow(item));
+  if (error) console.error("updateMenuItem:", error);
+}
+
+export async function deleteMenuItem(id: number): Promise<void> {
+  const { error } = await supabase.from("menu_items").delete().eq("id", id);
+  if (error) console.error("deleteMenuItem:", error);
+}
+
+export async function toggleFeatured(id: number): Promise<void> {
+  const { data } = await supabase.from("menu_items").select("featured").eq("id", id).single();
+  if (data) {
+    await supabase.from("menu_items").update({ featured: !data.featured }).eq("id", id);
   }
 }
 
-export function saveMenu(menu: MenuItem[]): void {
-  localStorage.setItem(MENU_KEY, JSON.stringify(menu));
-}
+export async function getFeaturedItems(): Promise<MenuItem[]> {
+  const { data: featured } = await supabase
+    .from("menu_items")
+    .select("*")
+    .eq("featured", true)
+    .eq("available", true);
+  if (featured && featured.length >= 3) return featured.map(mapMenuRow);
 
-export function updateMenuItem(item: MenuItem): void {
-  const menu = getMenu();
-  const index = menu.findIndex((m) => m.id === item.id);
-  if (index !== -1) {
-    menu[index] = item;
-  } else {
-    menu.push(item);
-  }
-  saveMenu(menu);
-}
-
-export function deleteMenuItem(id: number): void {
-  const menu = getMenu();
-  const filtered = menu.filter((m) => m.id !== id);
-  saveMenu(filtered);
-}
-
-export function toggleFeatured(id: number): void {
-  const menu = getMenu();
-  const index = menu.findIndex((m) => m.id === id);
-  if (index !== -1) {
-    menu[index].featured = !menu[index].featured;
-    saveMenu(menu);
-  }
-}
-
-export function getFeaturedItems(): MenuItem[] {
-  const menu = getMenu();
-  const featured = menu.filter((m) => m.featured && m.available !== false);
-  if (featured.length >= 3) return featured;
-  // Fallback: first 6 available items
-  return menu.filter((m) => m.available !== false).slice(0, 6);
+  const { data: all } = await supabase
+    .from("menu_items")
+    .select("*")
+    .eq("available", true)
+    .order("id")
+    .limit(6);
+  return (all || []).map(mapMenuRow);
 }
 
 // ── Categories ──────────────────────────────────────
 
-export function getCategories(): string[] {
-  try {
-    const data = localStorage.getItem(CATEGORIES_KEY);
-    return data ? JSON.parse(data) : defaultCategories;
-  } catch {
-    return defaultCategories;
-  }
+export async function getCategories(): Promise<string[]> {
+  const { data, error } = await supabase.from("categories").select("name").order("name");
+  if (error || !data || data.length === 0) return defaultCategories;
+  const names = data.map((r: any) => r.name as string);
+  // Always put "All" first
+  return ["All", ...names.filter((n) => n !== "All")];
 }
 
-export function saveCategories(cats: string[]): void {
-  localStorage.setItem(CATEGORIES_KEY, JSON.stringify(cats));
+export async function addCategory(name: string): Promise<void> {
+  const { error } = await supabase.from("categories").insert({ name });
+  if (error) console.error("addCategory:", error);
 }
 
-export function addCategory(name: string): string[] {
-  const cats = getCategories();
-  if (!cats.includes(name)) {
-    cats.push(name);
-    saveCategories(cats);
-  }
-  return cats;
+export async function deleteCategory(name: string): Promise<void> {
+  if (name === "All") return;
+  const { error } = await supabase.from("categories").delete().eq("name", name);
+  if (error) console.error("deleteCategory:", error);
 }
 
-export function deleteCategory(name: string): string[] {
-  if (name === "All") return getCategories();
-  const cats = getCategories().filter((c) => c !== name);
-  saveCategories(cats);
-  return cats;
-}
-
-export function renameCategory(oldName: string, newName: string): string[] {
-  if (oldName === "All") return getCategories();
-  const cats = getCategories().map((c) => (c === oldName ? newName : c));
-  saveCategories(cats);
-  // Also update menu items with old category name
-  const menu = getMenu();
-  const updated = menu.map((item) =>
-    item.category === oldName ? { ...item, category: newName } : item
-  );
-  saveMenu(updated);
-  return cats;
+export async function renameCategory(oldName: string, newName: string): Promise<void> {
+  if (oldName === "All") return;
+  await supabase.from("categories").update({ name: newName }).eq("name", oldName);
+  await supabase.from("menu_items").update({ category: newName }).eq("category", oldName);
 }
 
 // ── Menu Gallery ────────────────────────────────────
 
-export function getMenuGallery(): MenuGalleryImage[] {
-  try {
-    const data = localStorage.getItem(GALLERY_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
+export async function getMenuGallery(): Promise<MenuGalleryImage[]> {
+  const { data, error } = await supabase
+    .from("gallery_images")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("getMenuGallery:", error); return []; }
+  return (data || []).map(mapGalleryRow);
 }
 
-export function addMenuGalleryImage(url: string, caption: string): MenuGalleryImage[] {
-  const gallery = getMenuGallery();
-  gallery.push({
+export async function addMenuGalleryImage(url: string, caption: string): Promise<void> {
+  const { error } = await supabase.from("gallery_images").insert({
     id: Date.now().toString(),
     url,
     caption,
-    createdAt: new Date().toISOString(),
   });
-  localStorage.setItem(GALLERY_KEY, JSON.stringify(gallery));
-  return gallery;
+  if (error) console.error("addMenuGalleryImage:", error);
 }
 
-export function deleteMenuGalleryImage(id: string): MenuGalleryImage[] {
-  const gallery = getMenuGallery().filter((img) => img.id !== id);
-  localStorage.setItem(GALLERY_KEY, JSON.stringify(gallery));
-  return gallery;
+export async function deleteMenuGalleryImage(id: string): Promise<void> {
+  const { error } = await supabase.from("gallery_images").delete().eq("id", id);
+  if (error) console.error("deleteMenuGalleryImage:", error);
 }
 
 // ── Settings ────────────────────────────────────────
 
-export function getSettings(): Settings {
-  try {
-    const data = localStorage.getItem(SETTINGS_KEY);
-    return data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : DEFAULT_SETTINGS;
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+export async function getSettings(): Promise<Settings> {
+  const { data, error } = await supabase.from("settings").select("*").eq("id", 1).single();
+  if (error || !data) return DEFAULT_SETTINGS;
+  return mapSettingsRow(data);
 }
 
-export function updateSettings(partial: Partial<Settings>): Settings {
-  const current = getSettings();
+export async function updateSettings(partial: Partial<Settings>): Promise<Settings> {
+  const current = await getSettings();
   const updated = { ...current, ...partial };
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+  const { error } = await supabase.from("settings").upsert({
+    id: 1,
+    restaurant_name: updated.restaurantName,
+    opening_time: updated.openingTime,
+    closing_time: updated.closingTime,
+    is_open: updated.isOpen,
+    delivery_fee: updated.deliveryFee,
+    delivery_fee_note: updated.deliveryFeeNote,
+  });
+  if (error) console.error("updateSettings:", error);
   return updated;
 }
 
 export function isRestaurantOpen(settings: Settings): boolean {
   if (!settings.isOpen) return false;
   const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const [openH, openM] = settings.openingTime.split(":").map(Number);
-  const [closeH, closeM] = settings.closingTime.split(":").map(Number);
-  const openMinutes = openH * 60 + openM;
-  const closeMinutes = closeH * 60 + closeM;
-  return currentMinutes >= openMinutes && currentMinutes < closeMinutes;
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const [oh, om] = settings.openingTime.split(":").map(Number);
+  const [ch, cm] = settings.closingTime.split(":").map(Number);
+  return cur >= oh * 60 + om && cur < ch * 60 + cm;
 }
 
-// ── Init ────────────────────────────────────────────
-// Ensure menu data exists in localStorage on first load
-export function initializeData(): void {
-  if (!localStorage.getItem(MENU_KEY)) {
-    saveMenu(menuItems);
+// ── Orders ──────────────────────────────────────────
+
+export async function getOrders(): Promise<{ active: Order[]; history: Order[] }> {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("getOrders:", error); return { active: [], history: [] }; }
+
+  const now = Date.now();
+  const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+  const orders = (data || []).map(mapOrderRow);
+
+  // Auto-archive stale active orders
+  const toArchive = orders.filter(
+    (o) =>
+      !o.archivedAt &&
+      o.status !== "completed" &&
+      o.status !== "rejected" &&
+      now - new Date(o.createdAt).getTime() > TWELVE_HOURS
+  );
+  if (toArchive.length > 0) {
+    await supabase
+      .from("orders")
+      .update({ status: "completed", archived_at: new Date().toISOString() })
+      .in("order_id", toArchive.map((o) => o.orderId));
   }
-  if (!localStorage.getItem(CATEGORIES_KEY)) {
-    saveCategories(defaultCategories);
+
+  // Delete orders archived > 7 days ago
+  const toDelete = orders.filter(
+    (o) => o.archivedAt && now - new Date(o.archivedAt).getTime() > SEVEN_DAYS
+  );
+  if (toDelete.length > 0) {
+    await supabase
+      .from("orders")
+      .delete()
+      .in("order_id", toDelete.map((o) => o.orderId));
+  }
+
+  const archivedAt = new Date().toISOString();
+  const cleaned = orders
+    .map((o) =>
+      toArchive.find((a) => a.orderId === o.orderId)
+        ? { ...o, status: "completed" as const, archivedAt }
+        : o
+    )
+    .filter((o) => !toDelete.find((d) => d.orderId === o.orderId));
+
+  return {
+    active: cleaned.filter((o) => !o.archivedAt),
+    history: cleaned.filter((o) => !!o.archivedAt),
+  };
+}
+
+export async function saveOrder(order: Order): Promise<void> {
+  const { error } = await supabase.from("orders").insert({
+    order_id: order.orderId,
+    customer_name: order.customerName,
+    phone: order.phone,
+    order_type: order.orderType,
+    delivery_address: order.deliveryAddress ?? null,
+    location: order.location ?? null,
+    items: order.items,
+    subtotal: order.subtotal,
+    total: order.total,
+    special_instructions: order.specialInstructions ?? null,
+    status: order.status,
+    created_at: order.createdAt,
+    archived_at: order.archivedAt,
+  });
+  if (error) console.error("saveOrder:", error);
+}
+
+export async function updateOrderStatus(orderId: string, status: Order["status"]): Promise<void> {
+  const update: Record<string, unknown> = { status };
+  if (status === "completed") update.archived_at = new Date().toISOString();
+  const { error } = await supabase.from("orders").update(update).eq("order_id", orderId);
+  if (error) console.error("updateOrderStatus:", error);
+}
+
+// ── Init: seeds DB on first run ─────────────────────
+
+export async function initializeData(): Promise<void> {
+  const { count: menuCount } = await supabase
+    .from("menu_items")
+    .select("*", { count: "exact", head: true });
+  if (menuCount === 0) {
+    await supabase.from("menu_items").insert(menuItems.map(mapMenuItemToRow));
+  }
+
+  const { count: catCount } = await supabase
+    .from("categories")
+    .select("*", { count: "exact", head: true });
+  if (catCount === 0) {
+    await supabase.from("categories").insert(
+      defaultCategories.filter((c) => c !== "All").map((name) => ({ name }))
+    );
   }
 }

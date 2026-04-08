@@ -23,8 +23,8 @@ export default function MenuGallery() {
     fetchGallery();
   }, [navigate]);
 
-  const fetchGallery = () => {
-    const images = getMenuGallery();
+  const fetchGallery = async () => {
+    const images = await getMenuGallery();
     setGallery(images);
     setLoading(false);
   };
@@ -45,18 +45,17 @@ export default function MenuGallery() {
     return () => clearTimeout(timer);
   }, [imageUrl]);
 
-  const handleAddImage = () => {
+  const handleAddImage = async () => {
     if (!imageUrl.trim()) return;
-
-    addMenuGalleryImage(imageUrl.trim(), caption.trim());
+    await addMenuGalleryImage(imageUrl.trim(), caption.trim());
     setImageUrl("");
     setCaption("");
     setPreviewUrl("");
     fetchGallery();
   };
 
-  const handleDeleteImage = (id: string) => {
-    deleteMenuGalleryImage(id);
+  const handleDeleteImage = async (id: string) => {
+    await deleteMenuGalleryImage(id);
     setDeleteConfirm(null);
     fetchGallery();
   };

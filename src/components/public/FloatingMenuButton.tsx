@@ -14,8 +14,7 @@ export default function FloatingMenuButton() {
 
   useEffect(() => {
     if (drawerOpen) {
-      const images = getMenuGallery();
-      setGalleryImages(images);
+      getMenuGallery().then(setGalleryImages);
     }
   }, [drawerOpen]);
 

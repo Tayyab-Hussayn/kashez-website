@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { getSettings, updateSettings, type Settings } from "@/lib/db";
+import { getSettings, updateSettings, type Settings, DEFAULT_SETTINGS } from "@/lib/db";
 import { isAuthenticated } from "@/lib/auth";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { formatPKR } from "@/lib/currency";
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const navigate = useNavigate();
@@ -20,20 +20,19 @@ export default function SettingsPage() {
     fetchSettings();
   }, [navigate]);
 
-  const fetchSettings = () => {
-    const currentSettings = getSettings();
+  const fetchSettings = async () => {
+    const currentSettings = await getSettings();
     setSettings(currentSettings);
     setLoading(false);
   };
 
-  const handleSave = () => {
-    if (!settings) return;
-    updateSettings(settings);
+  const handleSave = async () => {
+    await updateSettings(settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  if (loading || !settings) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />

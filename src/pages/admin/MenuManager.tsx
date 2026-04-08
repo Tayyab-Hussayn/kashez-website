@@ -2,14 +2,15 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, X, Edit2, Trash2, Star } from "lucide-react";
-import { categories, type MenuItem } from "@/lib/menuData";
-import { getMenu, updateMenuItem, deleteMenuItem, toggleFeatured } from "@/lib/db";
+import { type MenuItem } from "@/lib/menuData";
+import { getMenu, updateMenuItem, deleteMenuItem, toggleFeatured, getCategories } from "@/lib/db";
 import { isAuthenticated } from "@/lib/auth";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { formatPKR } from "@/lib/currency";
 
 export default function MenuManager() {
   const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -23,32 +24,32 @@ export default function MenuManager() {
     fetchMenu();
   }, [navigate]);
 
-  const fetchMenu = () => {
-    const storedMenu = getMenu();
+  const fetchMenu = async () => {
+    const [storedMenu, cats] = await Promise.all([getMenu(), getCategories()]);
     setMenu(storedMenu);
+    setCategories(cats.filter((c) => c !== "All"));
     setLoading(false);
   };
 
-  const handleSaveItem = (item: MenuItem) => {
-    updateMenuItem(item);
+  const handleSaveItem = async (item: MenuItem) => {
+    await updateMenuItem(item);
     fetchMenu();
     setShowModal(false);
     setEditingItem(null);
   };
 
-  const handleDeleteItem = (id: number) => {
+  const handleDeleteItem = async (id: number) => {
     if (!confirm("Are you sure you want to delete this item?")) return;
-    deleteMenuItem(id);
+    await deleteMenuItem(id);
     fetchMenu();
   };
 
   const handleToggleAvailable = (item: MenuItem) => {
-    const updated = { ...item, available: !item.available };
-    handleSaveItem(updated);
+    handleSaveItem({ ...item, available: !item.available });
   };
 
-  const handleToggleFeatured = (item: MenuItem) => {
-    toggleFeatured(item.id);
+  const handleToggleFeatured = async (item: MenuItem) => {
+    await toggleFeatured(item.id);
     fetchMenu();
   };
 
@@ -171,6 +172,7 @@ export default function MenuManager() {
         {showModal && (
           <ItemModal
             item={editingItem}
+            categories={categories}
             onClose={() => {
               setShowModal(false);
               setEditingItem(null);
@@ -185,10 +187,12 @@ export default function MenuManager() {
 
 function ItemModal({
   item,
+  categories,
   onClose,
   onSave,
 }: {
   item: MenuItem | null;
+  categories: string[];
   onClose: () => void;
   onSave: (item: MenuItem) => void;
 }) {
@@ -262,7 +266,7 @@ function ItemModal({
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full bg-surface-2 border border-stroke rounded-xl px-4 py-3 font-body text-sm text-text-primary focus:outline-none focus:border-accent/50"
               >
-                {categories.filter(c => c !== "All").map((cat) => (
+                {categories.map((cat) => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
